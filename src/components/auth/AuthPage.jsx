@@ -177,11 +177,12 @@ const AuthPage = () => {
       if (result.success) {
         console.log('Registration successful:', result.message);
         
+        // After successful registration, automatically log the user in
         const userData = {
-          email: formData.email,
-          userType: userType,
-          firstName: formData.firstName,
-          lastName: formData.lastName,
+          user_type: userType,
+          email_id: formData.email,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
           id: result.user?.id
         };
         
@@ -193,15 +194,15 @@ const AuthPage = () => {
       }
     } catch (error) {
       console.error('Registration error:', error);
-      setErrors({ 
-        submit: 'An unexpected error occurred. Please try again.' 
-      });
+      const errorMessage = 'An unexpected error occurred. Please try again.';
+      setErrors({ submit: errorMessage });
+      showToast(errorMessage, 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // onClick Sign In - calls LoginApi
+  // onClick Sign In - calls LoginApi with updated parameters
   const onClickSignIn = async () => {
     if (!validateForm()) {
       return;
@@ -210,30 +211,45 @@ const AuthPage = () => {
     setIsLoading(true);
     
     try {
-      // Call LoginApi
-      const result = await loginApi.loginUser(formData.email, formData.password);
-      
-      if (result.success) {
-        const userData = {
-          email: formData.email,
-          userType: userType,
-          firstName: result.user?.first_name || result.user?.firstName || 'User',
-          lastName: result.user?.last_name || result.user?.lastName || '',
-          id: result.user?.id,
-          token: result.token
-        };
+      console.log('Attempting login with:', {
+        userType: userType,
+        email: formData.email,
+        password: '***'
+      });
 
-        await login(userData);
-        console.log('Login successful');
-        alert('Login successful! Welcome back.');
+      // Call LoginApi with the correct parameters (userType, emailId, password)
+      const result = await loginApi.loginUser(userType, formData.email, formData.password);
+      
+      console.log('Login API result:', result);
+      
+      if (result.success && result.user) {
+        console.log('Login successful, user data from backend:', result.user);
+        
+        // Pass the user data from the backend to the AuthContext
+        await login(result.user);
+        
+        showToast('Login successful! Redirecting...', 'success');
+        
+        // The AuthContext will handle the redirection based on user_type
+        console.log('Login completed, redirection handled by AuthContext');
+        
       } else {
-        setErrors({ submit: result.error });
+        const errorMessage = result.error || 'Login failed';
+        console.error('Login failed:', errorMessage);
+        setErrors({ submit: errorMessage });
+        showToast(errorMessage, 'error');
       }
     } catch (error) {
       console.error('Login error:', error);
-      setErrors({ 
-        submit: 'An unexpected error occurred. Please try again.' 
-      });
+      let errorMessage = 'An unexpected error occurred. Please try again.';
+      
+      // Handle specific network errors
+      if (error.message && error.message.includes('fetch')) {
+        errorMessage = 'Cannot connect to server. Please check if the backend is running on http://127.0.0.1:8000';
+      }
+      
+      setErrors({ submit: errorMessage });
+      showToast(errorMessage, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -283,16 +299,19 @@ const AuthPage = () => {
       const result = await forgotPasswordApi.setPassword(formData.email, formData.newPassword);
       
       if (result.success) {
-        alert('Password reset successfully! You can now login with your new password.');
+        showToast('Password reset successfully! You can now login with your new password.', 'success');
         setShowNewPasswordForm(false);
         setShowForgotPassword(false);
         resetForm();
         setIsLogin(true);
       } else {
         setErrors({ submit: result.error });
+        showToast(result.error, 'error');
       }
     } catch (error) {
-      setErrors({ submit: 'Failed to reset password. Please try again.' });
+      const errorMessage = 'Failed to reset password. Please try again.';
+      setErrors({ submit: errorMessage });
+      showToast(errorMessage, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -342,6 +361,7 @@ const AuthPage = () => {
   if (showNewPasswordForm) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4">
+        {toast && <Toast message={toast.message} type={toast.type} onClose={hideToast} />}
         <div className="max-w-md w-full">
           <div className="bg-white rounded-2xl shadow-xl p-8">
             <div className="text-center mb-8">
@@ -386,6 +406,7 @@ const AuthPage = () => {
                       errors.newPassword ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="••••••••"
+                    autoComplete="new-password"
                   />
                   <button
                     type="button"
@@ -412,6 +433,7 @@ const AuthPage = () => {
                       errors.confirmNewPassword ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="••••••••"
+                    autoComplete="new-password"
                   />
                   <button
                     type="button"
@@ -472,6 +494,7 @@ const AuthPage = () => {
   if (showForgotPassword) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4">
+        {toast && <Toast message={toast.message} type={toast.type} onClose={hideToast} />}
         <div className="max-w-md w-full">
           <div className="bg-white rounded-2xl shadow-xl p-8">
             <div className="text-center mb-8">
@@ -496,6 +519,7 @@ const AuthPage = () => {
                       errors.email ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="Enter your email"
+                    autoComplete="email"
                   />
                 </div>
                 {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
@@ -525,6 +549,7 @@ const AuthPage = () => {
   // Main Auth Form
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={hideToast} />}
       <div className="max-w-md w-full">
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           {/* Header */}
@@ -547,6 +572,7 @@ const AuthPage = () => {
                 {['patient', 'doctor', 'admin'].map((type) => (
                   <button
                     key={type}
+                    type="button"
                     onClick={() => {
                       setUserType(type);
                       setFormData(prev => ({ ...prev, userType: type }));
@@ -579,6 +605,7 @@ const AuthPage = () => {
                         errors.firstName ? 'border-red-500' : 'border-gray-300'
                       }`}
                       placeholder="John"
+                      autoComplete="given-name"
                     />
                     {errors.firstName && <p className="text-red-500 text-sm mt-1">{errors.firstName}</p>}
                   </div>
@@ -593,6 +620,7 @@ const AuthPage = () => {
                         errors.lastName ? 'border-red-500' : 'border-gray-300'
                       }`}
                       placeholder="Doe"
+                      autoComplete="family-name"
                     />
                     {errors.lastName && <p className="text-red-500 text-sm mt-1">{errors.lastName}</p>}
                   </div>
@@ -613,6 +641,7 @@ const AuthPage = () => {
                       errors.email ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="john@example.com"
+                    autoComplete="email"
                   />
                 </div>
                 {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
@@ -631,6 +660,7 @@ const AuthPage = () => {
                       errors.phone ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="+1 (555) 123-4567"
+                    autoComplete="tel"
                   />
                   {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
                 </div>
@@ -650,6 +680,7 @@ const AuthPage = () => {
                       errors.password ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="••••••••"
+                    autoComplete={isLogin ? "current-password" : "new-password"}
                   />
                   <button
                     type="button"
@@ -677,6 +708,7 @@ const AuthPage = () => {
                         errors.confirmPassword ? 'border-red-500' : 'border-gray-300'
                       }`}
                       placeholder="••••••••"
+                      autoComplete="new-password"
                     />
                     <button
                       type="button"

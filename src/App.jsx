@@ -1,39 +1,34 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import { Router, useRouter } from './components/routing/Router';
 import { ProtectedRoute, PublicRoute, NotFoundPage } from './components/routing/ProtectedRoute';
-import Layout from './components/layout/Layout';
 
-// Import page components
-import AuthPage from './components/auth/AuthPage';
-import AdminDashboard from './components/dashboards/AdminDashboard';
-import PatientDashboard from './components/dashboards/PatientDashboard';
-import DoctorDashboard from './components/dashboards/DoctorDashboard';
+// Lazy load components for better performance
+const Layout = lazy(() => import('./components/layout/Layout'));
+const AuthPage = lazy(() => import('./components/auth/AuthPage'));
+const AdminDashboard = lazy(() => import('./components/dashboards/AdminDashboard'));
+const PatientDashboard = lazy(() => import('./components/dashboards/PatientDashboard'));
+const DoctorDashboard = lazy(() => import('./components/dashboards/DoctorDashboard'));
+const AdminDoctorsDashboard = lazy(() => import('./components/dashboards/AdminDoctorsDashboard'));
 
-// Import additional components (these would be created separately)
-// import AdminDoctorsDashboard from './components/dashboards/AdminDoctorsDashboard';
-// import DoctorListing from './components/pages/DoctorListing';
-
-// Placeholder components for pages not yet created
-const AdminDoctorsDashboard = () => (
-  <div className="p-8">
-    <h1 className="text-3xl font-bold text-gray-900 mb-6">Doctor Management</h1>
-    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-      <p className="text-gray-600">Doctor management dashboard will be implemented here.</p>
-      <p className="text-sm text-gray-500 mt-2">
-        This will include adding, editing, removing doctors and managing their schedules.
-      </p>
+// Loading component for Suspense
+const LoadingSpinner = ({ message = "Loading..." }) => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="text-center">
+      <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+      <p className="text-gray-600">{message}</p>
     </div>
   </div>
 );
 
-const DoctorListing = () => (
+// Placeholder components for pages not yet created
+const DoctorPersonalDashboard = () => (
   <div className="p-8">
-    <h1 className="text-3xl font-bold text-gray-900 mb-6">Find Doctors</h1>
+    <h1 className="text-3xl font-bold text-gray-900 mb-6">Doctor Dashboard</h1>
     <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-      <p className="text-gray-600">Doctor listing and search functionality will be implemented here.</p>
+      <p className="text-gray-600">Doctor personal dashboard with schedule and patient management will be implemented here.</p>
       <p className="text-sm text-gray-500 mt-2">
-        Patients will be able to search, filter, and book appointments with doctors.
+        This will include today's appointments, patient records, and availability management.
       </p>
     </div>
   </div>
@@ -120,222 +115,242 @@ const PatientsPage = () => (
   </div>
 );
 
+// Helper function to get dashboard path based on user type
+const getDashboardPath = (userType) => {
+  switch (userType) {
+    case 'admin':
+      return '/admin';
+    case 'doctor':
+      return '/doctor';
+    case 'patient':
+      return '/patient';
+    default:
+      return '/patient';
+  }
+};
+
 // Main App routing component
 const AppRoutes = () => {
   const { currentPath } = useRouter();
   const { isAuthenticated, user, loading } = useAuth();
 
+  console.log('AppRoutes render:', { currentPath, isAuthenticated: isAuthenticated(), user, loading });
+
   // Show loading screen while checking authentication
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner message="Checking authentication..." />;
   }
 
   // Public routes (no authentication required)
   if (currentPath === '/auth' || currentPath === '/') {
+    // If user is already authenticated, redirect to their dashboard
+    if (isAuthenticated() && user) {
+      console.log('User already authenticated, redirecting to dashboard');
+      const dashboardPath = getDashboardPath(user.user_type || user.userType);
+      window.history.replaceState({}, '', dashboardPath);
+      return null;
+    }
+    
     return (
       <PublicRoute>
-        <AuthPage />
+        <Suspense fallback={<LoadingSpinner message="Loading login page..." />}>
+          <AuthPage />
+        </Suspense>
       </PublicRoute>
     );
   }
 
   // All other routes require authentication
   if (!isAuthenticated()) {
-    return (
-      <PublicRoute>
-        <AuthPage />
-      </PublicRoute>
-    );
+    console.log('User not authenticated, redirecting to auth');
+    window.history.replaceState({}, '', '/auth');
+    return null;
   }
+
+  // Get user type for routing decisions
+  const userType = user.user_type || user.userType;
+  console.log('Authenticated user type:', userType);
 
   // Route definitions based on user role and path
   const renderRoute = () => {
     // Admin routes
     if (currentPath.startsWith('/admin')) {
-      if (user.userType !== 'admin') {
+      if (userType !== 'admin') {
+        console.log('Access denied: user is not admin');
         return (
-          <ProtectedRoute allowedRoles={['admin']}>
-            <div>Access Denied</div>
-          </ProtectedRoute>
+          <Suspense fallback={<LoadingSpinner />}>
+            <Layout>
+              <div className="p-8 text-center">
+                <h1 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h1>
+                <p className="text-gray-600 mb-4">You don't have permission to access admin pages.</p>
+                <button 
+                  onClick={() => {
+                    const path = getDashboardPath(userType);
+                    window.history.pushState({}, '', path);
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                  }}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                >
+                  Go to My Dashboard
+                </button>
+              </div>
+            </Layout>
+          </Suspense>
         );
       }
 
-      switch (currentPath) {
-        case '/admin':
-          return (
-            <Layout>
-              <AdminDashboard />
-            </Layout>
-          );
-        case '/admin/doctors':
-          return (
-            <Layout>
-              <AdminDoctorsDashboard />
-            </Layout>
-          );
-        case '/admin/appointments':
-          return (
-            <Layout>
-              <AppointmentsPage />
-            </Layout>
-          );
-        case '/admin/feedback':
-          return (
-            <Layout>
-              <FeedbackPage />
-            </Layout>
-          );
-        case '/admin/analytics':
-          return (
-            <Layout>
-              <AnalyticsPage />
-            </Layout>
-          );
-        case '/admin/settings':
-          return (
-            <Layout>
-              <SettingsPage />
-            </Layout>
-          );
-        default:
-          return (
-            <Layout>
-              <AdminDashboard />
-            </Layout>
-          );
-      }
+      const AdminComponent = () => {
+        switch (currentPath) {
+          case '/admin':
+            return <AdminDashboard />;
+          case '/admin/doctors':
+            return <AdminDoctorsDashboard />;
+          case '/admin/appointments':
+            return <AppointmentsPage />;
+          case '/admin/feedback':
+            return <FeedbackPage />;
+          case '/admin/analytics':
+            return <AnalyticsPage />;
+          case '/admin/settings':
+            return <SettingsPage />;
+          default:
+            return <AdminDashboard />;
+        }
+      };
+
+      return (
+        <Suspense fallback={<LoadingSpinner message="Loading admin dashboard..." />}>
+          <Layout>
+            <AdminComponent />
+          </Layout>
+        </Suspense>
+      );
     }
 
     // Doctor routes
     if (currentPath.startsWith('/doctor')) {
-      if (user.userType !== 'doctor') {
+      if (userType !== 'doctor') {
+        console.log('Access denied: user is not doctor');
         return (
-          <ProtectedRoute allowedRoles={['doctor']}>
-            <div>Access Denied</div>
-          </ProtectedRoute>
+          <Suspense fallback={<LoadingSpinner />}>
+            <Layout>
+              <div className="p-8 text-center">
+                <h1 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h1>
+                <p className="text-gray-600 mb-4">You don't have permission to access doctor pages.</p>
+                <button 
+                  onClick={() => {
+                    const path = getDashboardPath(userType);
+                    window.history.pushState({}, '', path);
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                  }}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                >
+                  Go to My Dashboard
+                </button>
+              </div>
+            </Layout>
+          </Suspense>
         );
       }
 
-      switch (currentPath) {
-        case '/doctor':
-          return (
-            <Layout>
-              <DoctorDashboard />
-            </Layout>
-          );
-        case '/doctor/schedule':
-          return (
-            <Layout>
-              <SchedulePage />
-            </Layout>
-          );
-        case '/doctor/appointments':
-          return (
-            <Layout>
-              <AppointmentsPage />
-            </Layout>
-          );
-        case '/doctor/patients':
-          return (
-            <Layout>
-              <PatientsPage />
-            </Layout>
-          );
-        case '/doctor/reviews':
-          return (
-            <Layout>
-              <ReviewsPage />
-            </Layout>
-          );
-        case '/doctor/profile':
-          return (
-            <Layout>
-              <ProfilePage />
-            </Layout>
-          );
-        default:
-          return (
-            <Layout>
-              <DoctorDashboard />
-            </Layout>
-          );
-      }
+      const DoctorComponent = () => {
+        switch (currentPath) {
+          case '/doctor':
+            return <DoctorPersonalDashboard />;
+          case '/doctor/schedule':
+            return <SchedulePage />;
+          case '/doctor/appointments':
+            return <AppointmentsPage />;
+          case '/doctor/patients':
+            return <PatientsPage />;
+          case '/doctor/reviews':
+            return <ReviewsPage />;
+          case '/doctor/profile':
+            return <ProfilePage />;
+          default:
+            return <DoctorPersonalDashboard />;
+        }
+      };
+
+      return (
+        <Suspense fallback={<LoadingSpinner message="Loading doctor dashboard..." />}>
+          <Layout>
+            <DoctorComponent />
+          </Layout>
+        </Suspense>
+      );
     }
 
     // Patient routes
     if (currentPath.startsWith('/patient') || currentPath === '/doctors') {
-      if (user.userType !== 'patient') {
+      if (userType !== 'patient') {
+        console.log('Access denied: user is not patient');
         return (
-          <ProtectedRoute allowedRoles={['patient']}>
-            <div>Access Denied</div>
-          </ProtectedRoute>
+          <Suspense fallback={<LoadingSpinner />}>
+            <Layout>
+              <div className="p-8 text-center">
+                <h1 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h1>
+                <p className="text-gray-600 mb-4">You don't have permission to access patient pages.</p>
+                <button 
+                  onClick={() => {
+                    const path = getDashboardPath(userType);
+                    window.history.pushState({}, '', path);
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                  }}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                >
+                  Go to My Dashboard
+                </button>
+              </div>
+            </Layout>
+          </Suspense>
         );
       }
 
-      switch (currentPath) {
-        case '/patient':
-          return (
-            <Layout>
-              <PatientDashboard />
-            </Layout>
-          );
-        case '/doctors':
-          return (
-            <Layout>
-              <DoctorListing />
-            </Layout>
-          );
-        case '/patient/appointments':
-          return (
-            <Layout>
-              <AppointmentsPage />
-            </Layout>
-          );
-        case '/patient/history':
-          return (
-            <Layout>
-              <MedicalHistoryPage />
-            </Layout>
-          );
-        case '/patient/reviews':
-          return (
-            <Layout>
-              <ReviewsPage />
-            </Layout>
-          );
-        case '/patient/profile':
-          return (
-            <Layout>
-              <ProfilePage />
-            </Layout>
-          );
-        default:
-          return (
-            <Layout>
-              <PatientDashboard />
-            </Layout>
-          );
-      }
+      const PatientComponent = () => {
+        switch (currentPath) {
+          case '/patient':
+            return <PatientDashboard />;
+          case '/doctors':
+            return <DoctorDashboard />;
+          case '/patient/appointments':
+            return <AppointmentsPage />;
+          case '/patient/history':
+            return <MedicalHistoryPage />;
+          case '/patient/reviews':
+            return <ReviewsPage />;
+          case '/patient/profile':
+            return <ProfilePage />;
+          default:
+            return <PatientDashboard />;
+        }
+      };
+
+      return (
+        <Suspense fallback={<LoadingSpinner message="Loading patient dashboard..." />}>
+          <Layout>
+            <PatientComponent />
+          </Layout>
+        </Suspense>
+      );
     }
 
     // Shared protected routes
     if (currentPath === '/profile') {
       return (
-        <Layout>
-          <ProfilePage />
-        </Layout>
+        <Suspense fallback={<LoadingSpinner />}>
+          <Layout>
+            <ProfilePage />
+          </Layout>
+        </Suspense>
       );
     }
 
-    // 404 - Page not found
-    return <NotFoundPage />;
+    // If user is authenticated but on an invalid path, redirect to their dashboard
+    console.log('Invalid path for authenticated user, redirecting to dashboard');
+    const dashboardPath = getDashboardPath(userType);
+    window.history.replaceState({}, '', dashboardPath);
+    return null;
   };
 
   return renderRoute();

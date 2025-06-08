@@ -1,5 +1,5 @@
 // apis/LoginApi.js
-const API_BASE_URL = 'http://127.0.0.1:8000/v1';
+const API_BASE_URL = 'http://127.0.0.1:8000';
 
 class LoginApi {
   constructor() {
@@ -26,40 +26,61 @@ class LoginApi {
     };
 
     try {
+      console.log(`Making request to: ${url}`);
+      console.log('Request options:', requestOptions);
+      
       const response = await fetch(url, requestOptions);
+      const responseText = await response.text();
+      
+      console.log('Response status:', response.status);
+      console.log('Response text:', responseText);
       
       if (response.ok) {
-        const data = await response.json();
+        const data = responseText ? JSON.parse(responseText) : {};
         return {
           success: true,
           data: data,
           status: response.status
         };
       } else {
-        const errorData = await response.json();
+        let errorData = {};
+        try {
+          errorData = responseText ? JSON.parse(responseText) : {};
+        } catch (parseError) {
+          console.error('Error parsing error response:', parseError);
+        }
+        
         return {
           success: false,
-          error: errorData.message || errorData.error || 'Request failed',
+          error: errorData.message || errorData.error || `HTTP ${response.status}: ${response.statusText}`,
           status: response.status,
           data: errorData
         };
       }
     } catch (error) {
+      console.error('Network error:', error);
       return {
         success: false,
-        error: error.message || 'Network error occurred',
+        error: error.message || 'Network error occurred. Please check your connection.',
         status: 0
       };
     }
   }
 
-  // Login user - using if-then logic
-  async loginUser(email, password) {
+  // Login user - updated to match backend API format
+  async loginUser(userType, emailId, password) {
     // Validate inputs using if-then
-    if (!email) {
+    if (!userType) {
       return {
         success: false,
-        error: 'Email is required'
+        error: 'User type is required'
+      };
+    }
+
+    if (!emailId) {
+      return {
+        success: false,
+        error: 'Email ID is required'
       };
     }
 
@@ -72,7 +93,7 @@ class LoginApi {
 
     // Validate email format using if-then
     const emailRegex = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(emailId)) {
       return {
         success: false,
         error: 'Invalid email format'
@@ -87,26 +108,48 @@ class LoginApi {
       };
     }
 
-    // Prepare login payload - schema: email and password
+    // Validate user type
+    const validUserTypes = ['patient', 'doctor', 'admin'];
+    if (!validUserTypes.includes(userType.toLowerCase())) {
+      return {
+        success: false,
+        error: 'Invalid user type. Must be patient, doctor, or admin'
+      };
+    }
+
+    // Prepare login payload - match backend API schema exactly
     const loginPayload = {
-      email: email,
+      user_type: userType.toLowerCase(),
+      email_id: emailId,
       password: password
     };
 
+    console.log('Sending login request with payload:', loginPayload);
+
     // Make API request to login user
-    const result = await this.makeRequest('/users/log-in', {
+    const result = await this.makeRequest('/v1/users/log-in', {
       method: 'POST',
       body: JSON.stringify(loginPayload)
     });
 
+    console.log('Login API result:', result);
+
     // Handle response using if-then logic
     if (result.success) {
-      return {
-        success: true,
-        message: 'Login successful',
-        user: result.data,
-        token: result.data?.token || null
-      };
+      // Check if response has the expected structure
+      if (result.data && result.data.success && result.data.data) {
+        return {
+          success: true,
+          message: result.data.message || 'Login successful',
+          user: result.data.data,
+          status_code: result.data.status_code
+        };
+      } else {
+        return {
+          success: false,
+          error: 'Invalid response format from server'
+        };
+      }
     } else {
       // Handle specific error status codes using if-then
       if (result.status === 401) {
@@ -122,7 +165,7 @@ class LoginApi {
       } else if (result.status === 400) {
         return {
           success: false,
-          error: 'Invalid login credentials'
+          error: result.error || 'Invalid login credentials'
         };
       } else if (result.status === 403) {
         return {
@@ -144,6 +187,11 @@ class LoginApi {
           success: false,
           error: 'Server error. Please try again later.'
         };
+      } else if (result.status === 0) {
+        return {
+          success: false,
+          error: 'Unable to connect to server. Please check your internet connection and ensure the backend is running on http://127.0.0.1:8000'
+        };
       } else {
         return {
           success: false,
@@ -151,6 +199,22 @@ class LoginApi {
         };
       }
     }
+  }
+
+  // Helper method to validate user session
+  async validateSession(userType, emailId) {
+    if (!userType || !emailId) {
+      return {
+        success: false,
+        error: 'User type and email ID are required for session validation'
+      };
+    }
+
+    // This could be expanded to call a backend session validation endpoint
+    return {
+      success: true,
+      message: 'Session is valid'
+    };
   }
 }
 
