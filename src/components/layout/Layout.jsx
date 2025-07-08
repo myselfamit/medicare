@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   User, 
   Stethoscope, 
@@ -21,10 +21,20 @@ import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useRouter } from '../routing/Router';
 
 const Layout = ({ children }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, forceLogout } = useAuth();
   const { currentPath, navigate } = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationCount, setNotificationCount] = useState(3); // Mock notification count
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Simulate loading time and hide sidebar flash
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 100); // Small delay to prevent flash
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const getUserTypeIcon = (type) => {
     switch (type) {
@@ -45,7 +55,9 @@ const Layout = ({ children }) => {
   };
 
   const getNavigationItems = () => {
-    switch (user.userType) {
+    const userType = user?.user_type || user?.userType;
+    
+    switch (userType) {
       case 'admin':
         return [
           { path: '/admin', label: 'Dashboard', icon: Home },
@@ -83,10 +95,47 @@ const Layout = ({ children }) => {
     setSidebarOpen(false);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (window.confirm('Are you sure you want to logout?')) {
-      logout();
-      setSidebarOpen(false);
+      try {
+        console.log('Starting logout process...');
+        
+        // Close sidebar first
+        setSidebarOpen(false);
+        
+        // Call logout
+        logout();
+        
+        // Verify logout after a short delay
+        setTimeout(() => {
+          const hasUserData = localStorage.getItem('medicare_user') || 
+                             localStorage.getItem('medicare_user_type') || 
+                             localStorage.getItem('medicare_email_id');
+          
+          if (hasUserData) {
+            console.warn('Logout verification failed - some data remains');
+            // Use force logout as fallback
+            if (forceLogout) {
+              console.log('Using force logout as fallback');
+              forceLogout();
+            } else {
+              // Manual cleanup
+              localStorage.clear();
+              window.location.href = '/auth';
+            }
+          } else {
+            console.log('✅ Logout verification successful');
+          }
+        }, 500);
+        
+      } catch (error) {
+        console.error('Logout error:', error);
+        
+        // Fallback logout
+        localStorage.clear();
+        sessionStorage.clear();
+        window.location.href = '/auth';
+      }
     }
   };
 
@@ -103,15 +152,37 @@ const Layout = ({ children }) => {
     
     pathSegments.forEach((segment, index) => {
       const path = '/' + pathSegments.slice(0, index + 1).join('/');
-      const label = segment.charAt(0).toUpperCase() + segment.slice(1);
+      let label = segment.charAt(0).toUpperCase() + segment.slice(1);
+      
+      // Customize specific labels
+      if (segment === 'doctors' && pathSegments[0] !== 'admin') {
+        label = 'Find Doctors';
+      }
+      
       breadcrumbs.push({ path, label });
     });
     
     return breadcrumbs;
   };
 
+  const userType = user?.user_type || user?.userType;
+
+  // Show loading state to prevent layout flash
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex">
+        {/* Placeholder sidebar */}
+        <div className="hidden lg:block w-64 bg-white border-r border-gray-200"></div>
+        {/* Main content loading */}
+        <div className="flex-1 flex items-center justify-center">
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div 
@@ -121,14 +192,14 @@ const Layout = ({ children }) => {
       )}
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out z-50 lg:translate-x-0 ${
+      <div className={`fixed inset-y-0 left-0 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out z-50 lg:translate-x-0 lg:static lg:inset-0 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      } lg:static lg:inset-0`}>
+      }`}>
         
         {/* Sidebar Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center">
-            <div className={`w-8 h-8 bg-gradient-to-r ${getUserTypeColor(user.userType)} rounded-lg flex items-center justify-center mr-3`}>
+            <div className={`w-8 h-8 bg-gradient-to-r ${getUserTypeColor(userType)} rounded-lg flex items-center justify-center mr-3`}>
               <Stethoscope className="w-5 h-5 text-white" />
             </div>
             <span className="text-lg font-bold text-gray-900">Medicare</span>
@@ -144,20 +215,20 @@ const Layout = ({ children }) => {
         {/* User Profile Section */}
         <div className="p-4">
           <div className="flex items-center p-3 bg-gray-50 rounded-lg">
-            <div className={`w-10 h-10 bg-gradient-to-r ${getUserTypeColor(user.userType)} rounded-full flex items-center justify-center mr-3`}>
-              {getUserTypeIcon(user.userType)}
+            <div className={`w-10 h-10 bg-gradient-to-r ${getUserTypeColor(userType)} rounded-full flex items-center justify-center mr-3`}>
+              {getUserTypeIcon(userType)}
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-medium text-gray-900 truncate">
-                {user.firstName} {user.lastName}
+                {user?.firstName || 'User'} {user?.lastName || ''}
               </p>
-              <p className="text-sm text-gray-600 capitalize">{user.userType}</p>
+              <p className="text-sm text-gray-600 capitalize">{userType}</p>
             </div>
           </div>
         </div>
 
         {/* Navigation */}
-        <nav className="px-4 pb-4">
+        <nav className="px-4 pb-4 flex-1">
           <div className="space-y-2">
             {getNavigationItems().map((item, index) => {
               const Icon = item.icon;
@@ -168,7 +239,7 @@ const Layout = ({ children }) => {
                   onClick={() => handleNavigation(item.path)}
                   className={`w-full flex items-center px-4 py-3 rounded-lg text-left transition-colors duration-200 ${
                     isActive
-                      ? `bg-gradient-to-r ${getUserTypeColor(user.userType)} text-white shadow-lg`
+                      ? `bg-gradient-to-r ${getUserTypeColor(userType)} text-white shadow-lg`
                       : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
                   }`}
                 >
@@ -192,8 +263,8 @@ const Layout = ({ children }) => {
         </nav>
       </div>
 
-      {/* Main content */}
-      <div className="lg:ml-64">
+      {/* Main content area */}
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Top Header */}
         <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
           <div className="px-4 sm:px-6 lg:px-8">
@@ -226,7 +297,7 @@ const Layout = ({ children }) => {
 
               {/* Mobile title */}
               <div className="lg:hidden flex items-center">
-                <div className={`w-8 h-8 bg-gradient-to-r ${getUserTypeColor(user.userType)} rounded-lg flex items-center justify-center mr-3`}>
+                <div className={`w-8 h-8 bg-gradient-to-r ${getUserTypeColor(userType)} rounded-lg flex items-center justify-center mr-3`}>
                   <Stethoscope className="w-5 h-5 text-white" />
                 </div>
                 <span className="text-lg font-bold text-gray-900">Medicare</span>
@@ -260,14 +331,14 @@ const Layout = ({ children }) => {
                 {/* User Menu */}
                 <div className="relative">
                   <button className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 transition-colors duration-200">
-                    <div className={`w-8 h-8 bg-gradient-to-r ${getUserTypeColor(user.userType)} rounded-full flex items-center justify-center`}>
-                      {getUserTypeIcon(user.userType)}
+                    <div className={`w-8 h-8 bg-gradient-to-r ${getUserTypeColor(userType)} rounded-full flex items-center justify-center`}>
+                      {getUserTypeIcon(userType)}
                     </div>
                     <div className="hidden md:block text-left">
                       <p className="text-sm font-medium text-gray-900">
-                        {user.firstName} {user.lastName}
+                        {user?.firstName || 'User'} {user?.lastName || ''}
                       </p>
-                      <p className="text-xs text-gray-600 capitalize">{user.userType}</p>
+                      <p className="text-xs text-gray-600 capitalize">{userType}</p>
                     </div>
                   </button>
                 </div>
@@ -277,7 +348,7 @@ const Layout = ({ children }) => {
         </header>
 
         {/* Page content */}
-        <main className="min-h-screen">
+        <main className="flex-1 overflow-auto">
           {children}
         </main>
 

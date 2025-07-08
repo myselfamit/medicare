@@ -29,8 +29,10 @@ export const AuthProvider = ({ children }) => {
         
         if (savedUser && savedUserType && savedEmailId) {
           const userData = JSON.parse(savedUser);
-          // Ensure we have the required fields
+          // Ensure we have the required fields and normalize user type
           if (userData.user_type && userData.email_id) {
+            // Normalize user type field for consistency
+            userData.userType = userData.user_type;
             setUser(userData);
             console.log('User restored from localStorage:', userData);
           } else {
@@ -51,10 +53,45 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const clearAuthData = () => {
-    localStorage.removeItem('medicare_user');
-    localStorage.removeItem('medicare_user_type');
-    localStorage.removeItem('medicare_email_id');
-    localStorage.removeItem('medicare_token');
+    // List of all possible medicare-related localStorage keys
+    const medicareKeys = [
+      'medicare_user',
+      'medicare_user_type', 
+      'medicare_email_id',
+      'medicare_token',
+      'medicare_refresh_token',
+      'medicare_redirect_path',
+      'medicare_session',
+      'medicare_preferences',
+      'medicare_last_login'
+    ];
+    
+    // Remove each key
+    medicareKeys.forEach(key => {
+      if (localStorage.getItem(key)) {
+        localStorage.removeItem(key);
+        console.log('Cleared localStorage key:', key);
+      }
+    });
+    
+    // Also clear any sessionStorage items
+    medicareKeys.forEach(key => {
+      if (sessionStorage.getItem(key)) {
+        sessionStorage.removeItem(key);
+        console.log('Cleared sessionStorage key:', key);
+      }
+    });
+    
+    // Verify clearance
+    const remainingMedicareKeys = medicareKeys.filter(key => 
+      localStorage.getItem(key) || sessionStorage.getItem(key)
+    );
+    
+    if (remainingMedicareKeys.length > 0) {
+      console.warn('Some localStorage/sessionStorage keys were not cleared:', remainingMedicareKeys);
+    } else {
+      console.log('All medicare-related storage cleared successfully');
+    }
   };
 
   const login = async (userData) => {
@@ -69,12 +106,12 @@ export const AuthProvider = ({ children }) => {
           return;
         }
 
-        // Create user object with backend data
+        // Create user object with backend data and normalize fields
         const user = {
           user_type: userData.user_type,
           email_id: userData.email_id,
-          userType: userData.user_type, // Keep both formats for compatibility
-          email: userData.email_id,     // Keep both formats for compatibility
+          userType: userData.user_type, // Normalized field for component compatibility
+          email: userData.email_id,     // Normalized field for component compatibility
           firstName: userData.first_name || extractFirstName(userData.email_id),
           lastName: userData.last_name || '',
           loginTime: new Date().toISOString(),
@@ -131,22 +168,75 @@ export const AuthProvider = ({ children }) => {
     }, 100);
   };
 
+  // Enhanced logout with verification
   const logout = () => {
-    console.log('Logging out user');
-    setUser(null);
+    console.log('Initiating logout process...');
     
-    // Clear all localStorage data
-    clearAuthData();
-    
-    console.log('User logged out successfully');
+    try {
+      // Clear user state first
+      setUser(null);
+      
+      // Clear all localStorage data
+      clearAuthData();
+      
+      // Additional cleanup - scan for any medicare-related keys
+      const allKeys = Object.keys(localStorage);
+      const medicareKeys = allKeys.filter(key => key.toLowerCase().includes('medicare'));
+      
+      medicareKeys.forEach(key => {
+        localStorage.removeItem(key);
+        console.log('Removed additional medicare key:', key);
+      });
+      
+      // Verify logout success
+      const remainingKeys = [
+        'medicare_user',
+        'medicare_user_type', 
+        'medicare_email_id',
+        'medicare_token'
+      ].filter(key => localStorage.getItem(key));
+      
+      if (remainingKeys.length === 0) {
+        console.log('✅ Logout successful - all data cleared');
+      } else {
+        console.warn('⚠️ Some data may not have been cleared:', remainingKeys);
+        
+        // Force clear critical items one more time
+        localStorage.removeItem('medicare_user');
+        localStorage.removeItem('medicare_user_type');
+        localStorage.removeItem('medicare_email_id');
+        localStorage.removeItem('medicare_token');
+      }
+      
+      console.log('Final localStorage state:', {
+        hasUser: !!localStorage.getItem('medicare_user'),
+        hasUserType: !!localStorage.getItem('medicare_user_type'),
+        hasEmail: !!localStorage.getItem('medicare_email_id'),
+        hasToken: !!localStorage.getItem('medicare_token'),
+        totalKeys: Object.keys(localStorage).length
+      });
+      
+    } catch (error) {
+      console.error('Error during logout:', error);
+      
+      // Fallback - force clear critical items
+      try {
+        localStorage.clear(); // Nuclear option - clear everything
+        console.log('Performed complete localStorage clear as fallback');
+      } catch (clearError) {
+        console.error('Failed to clear localStorage:', clearError);
+      }
+    }
     
     // Redirect to auth page
-    window.history.replaceState({}, '', '/auth');
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    setTimeout(() => {
+      window.history.replaceState({}, '', '/auth');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }, 100);
   };
 
   const isAuthenticated = () => {
-    const authenticated = !!(user && user.user_type && user.email_id);
+    const authenticated = !!(user && (user.user_type || user.userType) && (user.email_id || user.email));
     console.log('isAuthenticated check:', authenticated, user);
     return authenticated;
   };
@@ -169,15 +259,24 @@ export const AuthProvider = ({ children }) => {
   const updateUser = (updatedData) => {
     if (user) {
       const updatedUser = { ...user, ...updatedData };
+      
+      // Ensure both user_type and userType are updated for consistency
+      if (updatedData.user_type) {
+        updatedUser.userType = updatedData.user_type;
+      }
+      if (updatedData.userType) {
+        updatedUser.user_type = updatedData.userType;
+      }
+      
       setUser(updatedUser);
       localStorage.setItem('medicare_user', JSON.stringify(updatedUser));
       
       // Update individual localStorage items if they changed
-      if (updatedData.user_type) {
-        localStorage.setItem('medicare_user_type', updatedData.user_type);
+      if (updatedData.user_type || updatedData.userType) {
+        localStorage.setItem('medicare_user_type', updatedUser.user_type);
       }
-      if (updatedData.email_id) {
-        localStorage.setItem('medicare_email_id', updatedData.email_id);
+      if (updatedData.email_id || updatedData.email) {
+        localStorage.setItem('medicare_email_id', updatedUser.email_id || updatedUser.email);
       }
       
       console.log('User updated:', updatedUser);
