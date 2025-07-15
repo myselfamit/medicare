@@ -20,7 +20,9 @@ import {
   TrendingUp,
   TrendingDown,
   CheckCircle,
-  X
+  X,
+  History,
+  MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import patientDashboardApi from '../../apis/PatientDashboardApi.js';
@@ -56,11 +58,58 @@ const PatientDashboard = () => {
       if (result.success) {
         setDashboardData(result.data);
       } else {
-        setError(result.error || 'Failed to load dashboard data');
+        // Set fallback data if API fails
+        console.warn('Dashboard API failed, using fallback data:', result.error);
+        setDashboardData({
+          patient_info: {
+            first_name: user?.firstName || 'Patient',
+            last_name: user?.lastName || '',
+            email_id: emailId,
+            mobile: 'Not provided',
+            member_since: new Date().toISOString()
+          },
+          dashboard_stats: {
+            total_appointments: 0,
+            upcoming_appointments: 0,
+            completed_appointments: 0,
+            cancelled_appointments: 0,
+            pending_appointments: 0,
+            average_rating: 0,
+            total_reviews: 0,
+            last_checkup: null
+          },
+          upcoming_appointments: [],
+          past_appointments: [],
+          notifications: [],
+          health_tips: []
+        });
+        setError('Some features may be limited due to server connectivity issues.');
       }
     } catch (err) {
       console.error('Error loading dashboard data:', err);
       setError(err.message || 'An unexpected error occurred');
+      // Set minimal fallback data
+      setDashboardData({
+        patient_info: {
+          first_name: user?.firstName || 'Patient',
+          last_name: user?.lastName || '',
+          email_id: user?.email_id || user?.email,
+          mobile: 'Not provided'
+        },
+        dashboard_stats: {
+          total_appointments: 0,
+          upcoming_appointments: 0,
+          completed_appointments: 0,
+          cancelled_appointments: 0,
+          pending_appointments: 0,
+          average_rating: 0,
+          total_reviews: 0
+        },
+        upcoming_appointments: [],
+        past_appointments: [],
+        notifications: [],
+        health_tips: []
+      });
     } finally {
       setLoading(false);
     }
@@ -225,25 +274,6 @@ const PatientDashboard = () => {
     );
   }
 
-  // Error state
-  if (error) {
-    return (
-      <div className="p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-red-900 mb-2">Error Loading Dashboard</h3>
-          <p className="text-red-700 mb-4">{error}</p>
-          <button
-            onClick={loadDashboardData}
-            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-200"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // Main dashboard render
   return (
     <div className="p-6 space-y-6">
@@ -273,6 +303,16 @@ const PatientDashboard = () => {
           </button>
         </div>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
+            <p className="text-yellow-800 text-sm">{error}</p>
+          </div>
+        </div>
+      )}
 
       {/* Health Overview Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -316,25 +356,25 @@ const PatientDashboard = () => {
           onClick={() => setShowDoctorSearch(true)}
         />
         <QuickActionCard
+          title="My Appointments"
+          description="Manage current appointments"
+          icon={Calendar}
+          color="bg-green-500"
+          onClick={() => window.location.href = '/patient/appointments'}
+        />
+        <QuickActionCard
           title="Medical History"
           description="View past appointments"
-          icon={FileText}
-          color="bg-green-500"
+          icon={History}
+          color="bg-purple-500"
           onClick={() => window.location.href = '/patient/history'}
         />
         <QuickActionCard
           title="My Reviews"
           description="Rate your experiences"
-          icon={Star}
+          icon={MessageSquare}
           color="bg-yellow-500"
           onClick={() => window.location.href = '/patient/reviews'}
-        />
-        <QuickActionCard
-          title="Emergency"
-          description="Contact emergency services"
-          icon={Heart}
-          color="bg-red-500"
-          onClick={() => alert('Emergency services: 911')}
         />
       </div>
 
@@ -350,7 +390,9 @@ const PatientDashboard = () => {
               <X className="w-5 h-5" />
             </button>
           </div>
-          <DoctorSearch />
+          <div className="border border-gray-200 rounded-lg p-4">
+            <DoctorSearch />
+          </div>
         </div>
       )}
 
@@ -363,7 +405,10 @@ const PatientDashboard = () => {
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-gray-900">Upcoming Appointments</h3>
-                <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                <button 
+                  onClick={() => window.location.href = '/patient/appointments'}
+                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                >
                   View All
                 </button>
               </div>
@@ -488,7 +533,15 @@ const PatientDashboard = () => {
       {/* Past Appointments */}
       <div className="bg-white rounded-xl shadow-lg border border-gray-200">
         <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Recent Appointments</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">Recent Appointments</h3>
+            <button 
+              onClick={() => window.location.href = '/patient/history'}
+              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+            >
+              View Full History
+            </button>
+          </div>
         </div>
         <div className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

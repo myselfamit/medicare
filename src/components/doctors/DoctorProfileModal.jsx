@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, Calendar, Clock, Star, MapPin, Phone, Mail, 
   Award, Briefcase, DollarSign, ChevronLeft, ChevronRight,
-  AlertCircle, CheckCircle
+  AlertCircle, CheckCircle, RefreshCw
 } from 'lucide-react';
 import doctorSearchApi from '../../apis/DoctorSearchApi';
 import { useAuth } from '../../contexts/AuthContext';
@@ -15,6 +15,7 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [booking, setBooking] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (selectedDate && doctor) {
@@ -22,19 +23,36 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
     }
   }, [selectedDate]);
 
+  useEffect(() => {
+    if (isOpen) {
+      // Reset state when modal opens
+      setSelectedDate('');
+      setSelectedSlot('');
+      setAvailableSlots([]);
+      setError('');
+      setBookingSuccess(false);
+    }
+  }, [isOpen]);
+
   const loadAvailableSlots = async () => {
     try {
       setLoading(true);
+      setError('');
+      
       const result = await doctorSearchApi.getDoctorSlots(doctor.id, selectedDate);
       
       if (result.success) {
-        setAvailableSlots(result.data);
+        setAvailableSlots(result.data || []);
       } else {
         console.error('Failed to load slots:', result.error);
+        setError('Failed to load available time slots. Please try a different date.');
+        setAvailableSlots([]);
       }
-      setLoading(false);
     } catch (error) {
       console.error('Error loading slots:', error);
+      setError('Unable to load time slots. Please check your connection and try again.');
+      setAvailableSlots([]);
+    } finally {
       setLoading(false);
     }
   };
@@ -64,18 +82,28 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
 
   const handleBookAppointment = async () => {
     if (!selectedDate || !selectedSlot) {
-      alert('Please select a date and time slot');
+      setError('Please select both a date and time slot');
       return;
     }
     
     try {
       setBooking(true);
+      setError('');
+      
+      const userEmail = user?.email_id || user?.email;
+      if (!userEmail) {
+        setError('User email not found. Please log in again.');
+        return;
+      }
+      
       const bookingData = {
         doctor_id: doctor.id,
-        patient_email: user.email_id || user.email,
+        patient_email: userEmail,
         date: selectedDate,
         time_slot: selectedSlot,
-        type: 'Consultation'
+        type: 'Consultation',
+        doctor_name: `${doctor.first_name} ${doctor.last_name}`,
+        patient_name: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Patient'
       };
       
       const result = await doctorSearchApi.bookAppointment(bookingData);
@@ -84,14 +112,16 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
         setBookingSuccess(true);
         setTimeout(() => {
           onClose();
+          // Optionally redirect to appointments page
+          // window.location.href = '/patient/appointments';
         }, 2000);
       } else {
-        alert('Failed to book appointment. Please try again.');
+        setError(result.error || 'Failed to book appointment. Please try again.');
       }
-      setBooking(false);
     } catch (error) {
       console.error('Booking error:', error);
-      alert('Error booking appointment');
+      setError('An error occurred while booking. Please try again.');
+    } finally {
       setBooking(false);
     }
   };
@@ -120,7 +150,17 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
             <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
               <div className="flex items-center">
                 <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
-                <p className="text-green-800">Appointment booked successfully!</p>
+                <p className="text-green-800">Appointment booked successfully! Redirecting...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center">
+                <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+                <p className="text-red-800">{error}</p>
               </div>
             </div>
           )}
@@ -131,6 +171,9 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
               src={doctor.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${doctor.first_name}`} 
               alt={`${doctor.first_name} ${doctor.last_name}`}
               className="w-32 h-32 rounded-full bg-gray-200"
+              onError={(e) => {
+                e.target.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${doctor.first_name}`;
+              }}
             />
             
             <div className="flex-1">
@@ -144,15 +187,15 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
                 <div className="flex items-center">
                   <Star className="w-5 h-5 text-yellow-500 fill-current mr-2" />
                   <div>
-                    <p className="font-semibold">{doctor.rating}</p>
-                    <p className="text-xs text-gray-500">{doctor.total_reviews} reviews</p>
+                    <p className="font-semibold">{doctor.rating || 'N/A'}</p>
+                    <p className="text-xs text-gray-500">{doctor.total_reviews || 0} reviews</p>
                   </div>
                 </div>
                 
                 <div className="flex items-center">
                   <Briefcase className="w-5 h-5 text-blue-600 mr-2" />
                   <div>
-                    <p className="font-semibold">{doctor.experience}</p>
+                    <p className="font-semibold">{doctor.experience || 'N/A'}</p>
                     <p className="text-xs text-gray-500">Experience</p>
                   </div>
                 </div>
@@ -160,7 +203,7 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
                 <div className="flex items-center">
                   <DollarSign className="w-5 h-5 text-green-600 mr-2" />
                   <div>
-                    <p className="font-semibold">${doctor.consultation_fee}</p>
+                    <p className="font-semibold">${doctor.consultation_fee || 'N/A'}</p>
                     <p className="text-xs text-gray-500">Per Visit</p>
                   </div>
                 </div>
@@ -177,15 +220,15 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
               <div className="space-y-2 text-sm text-gray-600">
                 <div className="flex items-center">
                   <MapPin className="w-4 h-4 mr-2" />
-                  {doctor.location}
+                  {doctor.location || 'Location not specified'}
                 </div>
                 <div className="flex items-center">
                   <Phone className="w-4 h-4 mr-2" />
-                  {doctor.phone}
+                  {doctor.phone || 'Phone not provided'}
                 </div>
                 <div className="flex items-center">
                   <Mail className="w-4 h-4 mr-2" />
-                  {doctor.email}
+                  {doctor.email || 'Email not provided'}
                 </div>
               </div>
             </div>
@@ -194,18 +237,18 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
           {/* About */}
           <div className="mb-8">
             <h4 className="text-lg font-semibold text-gray-900 mb-2">About</h4>
-            <p className="text-gray-600">{doctor.about}</p>
+            <p className="text-gray-600">{doctor.about || 'No additional information available.'}</p>
           </div>
 
           {/* Working Hours */}
           <div className="mb-8">
             <h4 className="text-lg font-semibold text-gray-900 mb-2">Working Hours</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {Object.entries(doctor.working_hours || {}).map(([day, hours]) => (
+              {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => (
                 <div key={day} className="text-sm">
                   <p className="font-medium capitalize text-gray-700">{day}</p>
-                  {hours ? (
-                    <p className="text-gray-600">{hours.start} - {hours.end}</p>
+                  {doctor.working_hours && doctor.working_hours[day] ? (
+                    <p className="text-gray-600">{doctor.working_hours[day].start} - {doctor.working_hours[day].end}</p>
                   ) : (
                     <p className="text-gray-400">Closed</p>
                   )}
@@ -256,9 +299,12 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
                 </label>
                 {loading ? (
                   <div className="flex justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <div className="flex items-center">
+                      <RefreshCw className="w-5 h-5 animate-spin text-blue-600 mr-2" />
+                      <span className="text-gray-600">Loading available slots...</span>
+                    </div>
                   </div>
-                ) : (
+                ) : availableSlots.length > 0 ? (
                   <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
                     {availableSlots.map((slot, index) => (
                       <button
@@ -277,12 +323,32 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
                       </button>
                     ))}
                   </div>
+                ) : (
+                  <div className="text-center py-6 bg-gray-50 rounded-lg">
+                    <Calendar className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-500">No available slots for this date</p>
+                    <p className="text-xs text-gray-400 mt-1">Please try a different date</p>
+                  </div>
                 )}
-                {!loading && availableSlots.length === 0 && (
-                  <p className="text-center text-gray-500 mt-4">
-                    No available slots for this date
-                  </p>
-                )}
+              </div>
+            )}
+
+            {/* Booking Summary */}
+            {selectedDate && selectedSlot && (
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h5 className="font-medium text-blue-900 mb-2">Booking Summary</h5>
+                <div className="text-sm text-blue-800 space-y-1">
+                  <p><strong>Doctor:</strong> {doctor.first_name} {doctor.last_name}</p>
+                  <p><strong>Date:</strong> {new Date(selectedDate).toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  })}</p>
+                  <p><strong>Time:</strong> {selectedSlot}</p>
+                  <p><strong>Type:</strong> Consultation</p>
+                  <p><strong>Fee:</strong> ${doctor.consultation_fee || 'N/A'}</p>
+                </div>
               </div>
             )}
 
@@ -290,20 +356,33 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
             <div className="flex gap-4">
               <button
                 onClick={handleBookAppointment}
-                disabled={!selectedDate || !selectedSlot || booking}
+                disabled={!selectedDate || !selectedSlot || booking || bookingSuccess}
                 className={`flex-1 py-3 rounded-lg font-medium transition-colors ${
-                  selectedDate && selectedSlot && !booking
+                  selectedDate && selectedSlot && !booking && !bookingSuccess
                     ? 'bg-blue-600 text-white hover:bg-blue-700'
                     : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                {booking ? 'Booking...' : 'Book Appointment'}
+                {booking ? (
+                  <div className="flex items-center justify-center">
+                    <RefreshCw className="w-5 h-5 animate-spin mr-2" />
+                    Booking...
+                  </div>
+                ) : bookingSuccess ? (
+                  <div className="flex items-center justify-center">
+                    <CheckCircle className="w-5 h-5 mr-2" />
+                    Booked Successfully
+                  </div>
+                ) : (
+                  'Book Appointment'
+                )}
               </button>
               <button
                 onClick={onClose}
-                className="flex-1 py-3 rounded-lg font-medium border border-gray-300 text-gray-700 hover:bg-gray-50"
+                disabled={booking}
+                className="flex-1 py-3 rounded-lg font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
-                Cancel
+                {bookingSuccess ? 'Close' : 'Cancel'}
               </button>
             </div>
           </div>
