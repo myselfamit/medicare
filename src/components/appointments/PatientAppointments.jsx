@@ -146,9 +146,10 @@ const PatientAppointments = () => {
     return appointment.status === 'completed' && !appointment.rated;
   };
 
+  // Replace the AppointmentCard component in PatientAppointments.jsx with this:
   const AppointmentCard = ({ appointment }) => (
     <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-shadow duration-300">
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between">
         <div className="flex-1">
           <h3 className="text-lg font-semibold text-gray-900">{appointment.doctor_name}</h3>
           <p className="text-sm text-gray-600">{appointment.specialty}</p>
@@ -159,7 +160,10 @@ const PatientAppointments = () => {
             {appointment.status}
           </span>
           <div className="relative">
-            <button className="p-1 text-gray-400 hover:text-gray-600">
+            <button 
+              onClick={() => handleAppointmentAction(appointment, 'menu')}
+              className="p-1 text-gray-400 hover:text-gray-600"
+            >
               <MoreHorizontal className="w-4 h-4" />
             </button>
           </div>
@@ -233,8 +237,18 @@ const PatientAppointments = () => {
         {appointment.status === 'completed' && appointment.rated && (
           <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
             <Star className="w-4 h-4 text-yellow-500 fill-current mr-1" />
-            Rated
+            Rated {appointment.rating}/5
           </div>
+        )}
+
+        {!canModifyAppointment(appointment) && !canRateAppointment(appointment) && appointment.status !== 'completed' && (
+          <button
+            onClick={() => handleAppointmentAction(appointment, 'view')}
+            className="flex-1 bg-gray-50 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 flex items-center justify-center gap-1"
+          >
+            <Eye className="w-4 h-4" />
+            View Details
+          </button>
         )}
       </div>
     </div>

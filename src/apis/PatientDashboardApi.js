@@ -211,6 +211,8 @@ class PatientDashboardApi {
     }
   }
 
+  // Add these methods to the existing PatientDashboardApi class
+
   async submitFeedback(userType, emailId, feedbackData) {
     console.log('🔥 submitFeedback called with:', { userType, emailId, feedbackData });
     
@@ -235,6 +237,62 @@ class PatientDashboardApi {
       return {
         success: false,
         error: result.error || 'Failed to submit feedback'
+      };
+    }
+  }
+
+  async getFeedbackHistory(userType, emailId) {
+    console.log('🔥 getFeedbackHistory called with:', { userType, emailId });
+    
+    const payload = {
+      user_type: userType.toLowerCase(),
+      email_id: emailId.toLowerCase()
+    };
+
+    const result = await this.makeRequest('/v1/patient/feedback/history', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    if (result.success) {
+      return {
+        success: true,
+        data: result.data.data || [],
+        message: result.data.message || 'Feedback history retrieved successfully'
+      };
+    } else {
+      return {
+        success: false,
+        error: result.error || 'Failed to retrieve feedback history'
+      };
+    }
+  }
+
+  async updateFeedback(userType, emailId, feedbackId, updateData) {
+    console.log('🔥 updateFeedback called with:', { userType, emailId, feedbackId, updateData });
+    
+    const payload = {
+      user_type: userType.toLowerCase(),
+      email_id: emailId.toLowerCase(),
+      feedback_id: feedbackId,
+      ...updateData
+    };
+
+    const result = await this.makeRequest('/v1/patient/feedback/update', {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+
+    if (result.success) {
+      return {
+        success: true,
+        data: result.data.data || {},
+        message: result.data.message || 'Feedback updated successfully'
+      };
+    } else {
+      return {
+        success: false,
+        error: result.error || 'Failed to update feedback'
       };
     }
   }

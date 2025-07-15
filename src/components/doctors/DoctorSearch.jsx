@@ -129,9 +129,9 @@ const DoctorSearch = () => {
     setShowProfileModal(true);
   };
 
+// Updated DoctorCard component - replace the existing one in DoctorSearch.jsx
   const DoctorCard = ({ doctor }) => (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-shadow duration-300 cursor-pointer"
-         onClick={() => openDoctorProfile(doctor)}>
+    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-shadow duration-300">
       <div className="flex items-start space-x-4">
         <img 
           src={doctor.profile_image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${doctor.first_name}`} 
@@ -173,7 +173,10 @@ const DoctorSearch = () => {
         </div>
       </div>
       
-      <button className="mt-4 w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200">
+      <button 
+        onClick={() => openDoctorProfile(doctor)}
+        className="mt-4 w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
+      >
         View Profile & Book Appointment
       </button>
     </div>

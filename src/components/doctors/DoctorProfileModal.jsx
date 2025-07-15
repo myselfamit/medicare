@@ -7,7 +7,7 @@ import {
 import doctorSearchApi from '../../apis/DoctorSearchApi';
 import { useAuth } from '../../contexts/AuthContext';
 
-const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
+const DoctorProfileModal = ({ doctor, isOpen, onClose, onBookingSuccess }) => {
   const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState('');
   const [availableSlots, setAvailableSlots] = useState([]);
@@ -16,12 +16,14 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
   const [booking, setBooking] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [appointmentType, setAppointmentType] = useState('consultation');
+  const [patientNotes, setPatientNotes] = useState('');
 
   useEffect(() => {
     if (selectedDate && doctor) {
       loadAvailableSlots();
     }
-  }, [selectedDate]);
+  }, [selectedDate, doctor]);
 
   useEffect(() => {
     if (isOpen) {
@@ -31,6 +33,8 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
       setAvailableSlots([]);
       setError('');
       setBookingSuccess(false);
+      setAppointmentType('consultation');
+      setPatientNotes('');
     }
   }, [isOpen]);
 
@@ -74,11 +78,19 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
         dateString: date.toISOString().split('T')[0],
         dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
         dayNumber: date.getDate(),
+        monthName: date.toLocaleDateString('en-US', { month: 'short' }),
         isWorkingDay: isWorkingDay
       });
     }
     return days;
   };
+
+  const appointmentTypes = [
+    { value: 'consultation', label: 'Consultation' },
+    { value: 'follow-up', label: 'Follow-up' },
+    { value: 'check-up', label: 'Check-up' },
+    { value: 'emergency', label: 'Emergency' }
+  ];
 
   const handleBookAppointment = async () => {
     if (!selectedDate || !selectedSlot) {
@@ -97,23 +109,24 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
       }
       
       const bookingData = {
+        user_type: 'patient',
+        email_id: userEmail,
         doctor_id: doctor.id,
-        patient_email: userEmail,
         date: selectedDate,
-        time_slot: selectedSlot,
-        type: 'Consultation',
-        doctor_name: `${doctor.first_name} ${doctor.last_name}`,
-        patient_name: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Patient'
+        time: selectedSlot,
+        type: appointmentType,
+        notes: patientNotes
       };
       
       const result = await doctorSearchApi.bookAppointment(bookingData);
       
       if (result.success) {
         setBookingSuccess(true);
+        if (onBookingSuccess) {
+          onBookingSuccess(result.data);
+        }
         setTimeout(() => {
           onClose();
-          // Optionally redirect to appointments page
-          // window.location.href = '/patient/appointments';
         }, 2000);
       } else {
         setError(result.error || 'Failed to book appointment. Please try again.');
@@ -134,7 +147,7 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 p-6 z-10">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-gray-900">Doctor Profile</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Doctor Profile & Book Appointment</h2>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -285,6 +298,7 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
                     >
                       <div className="text-xs">{day.dayName}</div>
                       <div className="font-semibold">{day.dayNumber}</div>
+                      <div className="text-xs">{day.monthName}</div>
                     </button>
                   );
                 })}
@@ -333,6 +347,42 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
               </div>
             )}
 
+            {/* Appointment Type */}
+            {selectedDate && selectedSlot && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Appointment Type
+                </label>
+                <select
+                  value={appointmentType}
+                  onChange={(e) => setAppointmentType(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {appointmentTypes.map(type => (
+                    <option key={type.value} value={type.value}>
+                      {type.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Patient Notes */}
+            {selectedDate && selectedSlot && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Additional Notes (Optional)
+                </label>
+                <textarea
+                  value={patientNotes}
+                  onChange={(e) => setPatientNotes(e.target.value)}
+                  rows="3"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Please describe your symptoms or reason for visit..."
+                />
+              </div>
+            )}
+
             {/* Booking Summary */}
             {selectedDate && selectedSlot && (
               <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -346,8 +396,9 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose }) => {
                     day: 'numeric' 
                   })}</p>
                   <p><strong>Time:</strong> {selectedSlot}</p>
-                  <p><strong>Type:</strong> Consultation</p>
+                  <p><strong>Type:</strong> {appointmentTypes.find(t => t.value === appointmentType)?.label}</p>
                   <p><strong>Fee:</strong> ${doctor.consultation_fee || 'N/A'}</p>
+                  {patientNotes && <p><strong>Notes:</strong> {patientNotes}</p>}
                 </div>
               </div>
             )}

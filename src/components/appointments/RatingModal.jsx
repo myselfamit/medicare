@@ -8,7 +8,10 @@ import {
   RefreshCw,
   User,
   Calendar,
-  Clock
+  Clock,
+  ThumbsUp,
+  ThumbsDown,
+  MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import patientDashboardApi from '../../apis/PatientDashboardApi.js';
@@ -22,6 +25,7 @@ const RatingModal = ({ appointment, isOpen, onClose, onSubmit }) => {
   const [wouldRecommend, setWouldRecommend] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     if (isOpen && appointment) {
@@ -32,6 +36,7 @@ const RatingModal = ({ appointment, isOpen, onClose, onSubmit }) => {
       setCategory('overall');
       setWouldRecommend('');
       setError('');
+      setSuccess(false);
     }
   }, [isOpen, appointment]);
 
@@ -94,19 +99,24 @@ const RatingModal = ({ appointment, isOpen, onClose, onSubmit }) => {
         comment: comment.trim(),
         would_recommend: wouldRecommend,
         appointment_date: appointment.date,
-        feedback_date: new Date().toISOString().split('T')[0]
+        appointment_time: appointment.time,
+        feedback_date: new Date().toISOString().split('T')[0],
+        feedback_time: new Date().toTimeString().split(' ')[0]
       };
 
       const result = await patientDashboardApi.submitFeedback(userType, emailId, feedbackData);
 
       if (result.success) {
-        onSubmit();
-        onClose();
+        setSuccess(true);
+        setTimeout(() => {
+          onSubmit();
+          onClose();
+        }, 2000);
       } else {
         setError(result.error || 'Failed to submit feedback');
       }
     } catch (err) {
-      setError('Error submitting feedback');
+      setError('Error submitting feedback. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -133,6 +143,16 @@ const RatingModal = ({ appointment, isOpen, onClose, onSubmit }) => {
         </div>
 
         <div className="p-6">
+          {/* Success Message */}
+          {success && (
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center">
+                <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
+                <p className="text-green-800">Thank you for your feedback! Your review has been submitted successfully.</p>
+              </div>
+            </div>
+          )}
+
           {/* Appointment Info */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <div className="flex items-center mb-3">
@@ -142,6 +162,7 @@ const RatingModal = ({ appointment, isOpen, onClose, onSubmit }) => {
               <div>
                 <h3 className="font-semibold text-blue-900">{appointment.doctor_name}</h3>
                 <p className="text-sm text-blue-700">{appointment.specialty}</p>
+                <p className="text-xs text-blue-600">{appointment.department}</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4 text-sm text-blue-800">
@@ -171,6 +192,7 @@ const RatingModal = ({ appointment, isOpen, onClose, onSubmit }) => {
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={submitting}
               >
                 {ratingCategories.map(cat => (
                   <option key={cat.value} value={cat.value}>{cat.label}</option>
@@ -192,6 +214,7 @@ const RatingModal = ({ appointment, isOpen, onClose, onSubmit }) => {
                     onMouseEnter={() => handleStarHover(star)}
                     onMouseLeave={handleStarLeave}
                     className="focus:outline-none transition-transform hover:scale-110"
+                    disabled={submitting}
                   >
                     <Star
                       className={`w-8 h-8 ${
@@ -222,6 +245,8 @@ const RatingModal = ({ appointment, isOpen, onClose, onSubmit }) => {
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Tell others about your experience with this doctor. What did you like? What could be improved?"
                 required
+                disabled={submitting}
+                maxLength={500}
               />
               <p className="text-xs text-gray-500 mt-1">
                 {comment.length}/500 characters
@@ -242,8 +267,12 @@ const RatingModal = ({ appointment, isOpen, onClose, onSubmit }) => {
                     checked={wouldRecommend === 'yes'}
                     onChange={(e) => setWouldRecommend(e.target.value)}
                     className="w-4 h-4 text-blue-600"
+                    disabled={submitting}
                   />
-                  <span className="ml-3 text-gray-700">Yes, I would recommend</span>
+                  <span className="ml-3 text-gray-700 flex items-center">
+                    <ThumbsUp className="w-4 h-4 mr-1 text-green-600" />
+                    Yes, I would recommend
+                  </span>
                 </label>
                 <label className="flex items-center">
                   <input
@@ -253,8 +282,12 @@ const RatingModal = ({ appointment, isOpen, onClose, onSubmit }) => {
                     checked={wouldRecommend === 'no'}
                     onChange={(e) => setWouldRecommend(e.target.value)}
                     className="w-4 h-4 text-red-600"
+                    disabled={submitting}
                   />
-                  <span className="ml-3 text-gray-700">No, I would not recommend</span>
+                  <span className="ml-3 text-gray-700 flex items-center">
+                    <ThumbsDown className="w-4 h-4 mr-1 text-red-600" />
+                    No, I would not recommend
+                  </span>
                 </label>
                 <label className="flex items-center">
                   <input
@@ -264,8 +297,12 @@ const RatingModal = ({ appointment, isOpen, onClose, onSubmit }) => {
                     checked={wouldRecommend === 'maybe'}
                     onChange={(e) => setWouldRecommend(e.target.value)}
                     className="w-4 h-4 text-yellow-600"
+                    disabled={submitting}
                   />
-                  <span className="ml-3 text-gray-700">Maybe, with some improvements</span>
+                  <span className="ml-3 text-gray-700 flex items-center">
+                    <MessageSquare className="w-4 h-4 mr-1 text-yellow-600" />
+                    Maybe, with some improvements
+                  </span>
                 </label>
               </div>
             </div>
@@ -286,15 +323,15 @@ const RatingModal = ({ appointment, isOpen, onClose, onSubmit }) => {
                 type="button"
                 onClick={onClose}
                 disabled={submitting}
-                className="flex-1 border border-gray-300 text-gray-700 py-3 px-6 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                className="flex-1 border border-gray-300 text-gray-700 py-3 px-6 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={submitting || rating === 0 || !comment.trim()}
+                disabled={submitting || rating === 0 || !comment.trim() || success}
                 className={`flex-1 py-3 px-6 rounded-lg font-medium transition-colors ${
-                  submitting || rating === 0 || !comment.trim()
+                  submitting || rating === 0 || !comment.trim() || success
                     ? 'bg-gray-400 cursor-not-allowed text-white'
                     : 'bg-blue-600 hover:bg-blue-700 text-white'
                 }`}
@@ -303,6 +340,11 @@ const RatingModal = ({ appointment, isOpen, onClose, onSubmit }) => {
                   <div className="flex items-center justify-center">
                     <RefreshCw className="w-5 h-5 animate-spin mr-2" />
                     Submitting...
+                  </div>
+                ) : success ? (
+                  <div className="flex items-center justify-center">
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Submitted!
                   </div>
                 ) : (
                   <div className="flex items-center justify-center">

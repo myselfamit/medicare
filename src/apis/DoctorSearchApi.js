@@ -339,12 +339,26 @@ class DoctorSearchApi {
     }
   }
 
+  // Replace the bookAppointment method in DoctorSearchApi.js with this:
   async bookAppointment(bookingData) {
     console.log('🔥 bookAppointment called with:', bookingData);
     
+    // Ensure we have all required fields
+    const payload = {
+      user_type: bookingData.user_type || 'patient',
+      email_id: bookingData.email_id,
+      doctor_id: bookingData.doctor_id,
+      date: bookingData.date,
+      time: bookingData.time,
+      type: bookingData.type || 'consultation',
+      notes: bookingData.notes || ''
+    };
+
+    console.log('🔥 Sending booking payload:', payload);
+    
     const result = await this.makeRequest('/v1/patient/appointments/book', {
       method: 'POST',
-      body: JSON.stringify(bookingData)
+      body: JSON.stringify(payload)
     });
 
     console.log('🔥 Book appointment API result:', result);
