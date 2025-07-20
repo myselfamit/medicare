@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, Calendar, Clock, Star, MapPin, Phone, Mail, 
   Award, Briefcase, DollarSign, ChevronLeft, ChevronRight,
-  AlertCircle, CheckCircle, RefreshCw
+  AlertCircle, CheckCircle, RefreshCw, User
 } from 'lucide-react';
 import doctorSearchApi from '../../apis/DoctorSearchApi';
 import { useAuth } from '../../contexts/AuthContext';
@@ -19,6 +19,11 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose, onBookingSuccess }) => {
   const [appointmentType, setAppointmentType] = useState('consultation');
   const [patientNotes, setPatientNotes] = useState('');
 
+  // Debug function
+  const debugLog = (action, data) => {
+    console.log(`🔍 [DoctorProfileModal] ${action}:`, data);
+  };
+
   useEffect(() => {
     if (selectedDate && doctor) {
       loadAvailableSlots();
@@ -27,6 +32,7 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose, onBookingSuccess }) => {
 
   useEffect(() => {
     if (isOpen) {
+      debugLog('Modal opened', { doctor, isOpen });
       // Reset state when modal opens
       setSelectedDate('');
       setSelectedSlot('');
@@ -43,10 +49,13 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose, onBookingSuccess }) => {
       setLoading(true);
       setError('');
       
+      debugLog('Loading slots for', { doctorId: doctor.id, date: selectedDate });
+      
       const result = await doctorSearchApi.getDoctorSlots(doctor.id, selectedDate);
       
       if (result.success) {
         setAvailableSlots(result.data || []);
+        debugLog('Slots loaded', result.data);
       } else {
         console.error('Failed to load slots:', result.error);
         setError('Failed to load available time slots. Please try a different date.');
@@ -61,6 +70,7 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose, onBookingSuccess }) => {
     }
   };
 
+  // FIXED: getNextSevenDays function with correct weekday option
   const getNextSevenDays = () => {
     const days = [];
     const today = new Date();
@@ -69,16 +79,20 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose, onBookingSuccess }) => {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
       
-      // Check if doctor works on this day
-      const dayName = date.toLocaleDateString('en-US', { weekday: 'lowercase' });
-      const isWorkingDay = doctor.working_hours && doctor.working_hours[dayName];
+      // FIXED: Use correct weekday options
+      const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+      const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+      
+      // Check if doctor works on this day - FIXED: Use correct day name
+      const dayNameForWorking = date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+      const isWorkingDay = doctor.working_hours && doctor.working_hours[dayNameForWorking] && doctor.working_hours[dayNameForWorking].start;
       
       days.push({
         date: date,
         dateString: date.toISOString().split('T')[0],
-        dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        dayName: dayName,
         dayNumber: date.getDate(),
-        monthName: date.toLocaleDateString('en-US', { month: 'short' }),
+        monthName: monthName,
         isWorkingDay: isWorkingDay
       });
     }
@@ -118,13 +132,24 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose, onBookingSuccess }) => {
         notes: patientNotes
       };
       
+      debugLog('Booking appointment', bookingData);
+      
       const result = await doctorSearchApi.bookAppointment(bookingData);
       
       if (result.success) {
         setBookingSuccess(true);
+        debugLog('Booking successful', result.data);
+        
+        // Call success callback
         if (onBookingSuccess) {
-          onBookingSuccess(result.data);
+          onBookingSuccess({
+            ...result.data,
+            doctor_name: `${doctor.first_name} ${doctor.last_name}`,
+            date: selectedDate,
+            time: selectedSlot
+          });
         }
+        
         setTimeout(() => {
           onClose();
         }, 2000);
@@ -139,7 +164,13 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose, onBookingSuccess }) => {
     }
   };
 
-  if (!isOpen || !doctor) return null;
+  // Don't render if modal is not open or no doctor
+  if (!isOpen || !doctor) {
+    debugLog('Modal not rendering', { isOpen, doctor: !!doctor });
+    return null;
+  }
+
+  debugLog('Modal rendering', { doctor: doctor.first_name + ' ' + doctor.last_name, isOpen });
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -260,7 +291,7 @@ const DoctorProfileModal = ({ doctor, isOpen, onClose, onBookingSuccess }) => {
               {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => (
                 <div key={day} className="text-sm">
                   <p className="font-medium capitalize text-gray-700">{day}</p>
-                  {doctor.working_hours && doctor.working_hours[day] ? (
+                  {doctor.working_hours && doctor.working_hours[day] && doctor.working_hours[day].start ? (
                     <p className="text-gray-600">{doctor.working_hours[day].start} - {doctor.working_hours[day].end}</p>
                   ) : (
                     <p className="text-gray-400">Closed</p>
